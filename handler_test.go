@@ -56,6 +56,42 @@ func TestHandler(t *testing.T) {
 		t.Log(k + " is passed")
 	}
 }
+
+func TestWithDefaultHandler(t *testing.T) {
+	//when
+	params := make(url.Values)
+	params.Add("token", slacktoken)
+	params.Add("user_name", "tarik")
+	params.Add("text", "")
+	m := &SlackMux{Token: slacktoken}
+	m.RegisterCommand("start", func(user string, args []string) (string, error) {
+		return user + " customresponse", nil
+	})
+	m.RegisterCommand("error", func(user string, args []string) (string, error) {
+		return "", errors.New(user + " error")
+	})
+	m.RegisterDefaultHandler(func(user string, args []string) (string, error) {
+		return "default handler", nil
+	})
+	table := map[string]string{
+		"start":          "tarik customresponse",
+		"error":          "tarik error",
+		"invalidcommand": "default handler",
+		"":               "default handler",
+	}
+	var resp string
+	for k, v := range table {
+		//setup
+		params.Set("text", k)
+		//test
+		resp = callHandlerWithParams(m, params)
+		//then
+		if resp != v {
+			t.Fatal("wrong response: " + resp + ", expected: " + v)
+		}
+		t.Log(k + " is passed")
+	}
+}
 func callHandlerWithParams(mux *SlackMux, params url.Values) string {
 	recorder := httptest.NewRecorder()
 	req := &http.Request{

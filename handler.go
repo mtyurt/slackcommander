@@ -11,8 +11,9 @@ import (
 type SlackMux struct {
 	Token string
 
-	commandMu  *sync.Mutex
-	commandMap map[string]SlackCommandHandler
+	commandMu      *sync.Mutex
+	commandMap     map[string]SlackCommandHandler
+	defaultHandler SlackCommandHandler
 }
 
 type SlackCommandHandler func(user string, args []string) (string, error)
@@ -39,6 +40,9 @@ func (mux *SlackMux) RegisterCommand(command string, handler SlackCommandHandler
 	mux.commandMu.Unlock()
 
 }
+func (mux *SlackMux) RegisterDefaultHandler(handler SlackCommandHandler) {
+	mux.defaultHandler = handler
+}
 func (mux *SlackMux) SlackHandler() func(w http.ResponseWriter, r *http.Request) {
 	if mux.Token == "" {
 		panic("Token is missing! Set token first!")
@@ -51,15 +55,18 @@ func (mux *SlackMux) SlackHandler() func(w http.ResponseWriter, r *http.Request)
 		}
 		user := r.FormValue("user_name")
 		text := r.FormValue("text")
-		if text == "" {
+		if text == "" && mux.defaultHandler == nil {
 			writeResponseWithBadRequest(&w, "Provide a command")
 			return
 		}
 		commands := strings.Split(text, " ")
 		handler, ok := mux.commandMap[commands[0]]
 		if !ok {
-			writeResponseWithBadRequest(&w, commands[0]+" is not a valid command.")
-			return
+			if mux.defaultHandler == nil {
+				fmt.Fprint(w, commands[0]+" is not a valid command.")
+				return
+			}
+			handler = mux.defaultHandler
 		}
 		resp, err := handler(user, commands)
 		if err != nil {
