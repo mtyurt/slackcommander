@@ -15,11 +15,11 @@ func TestRegisterCommand(t *testing.T) {
 	m.RegisterCommand("samplecommand", func(user string, args []string) (string, error) {
 		return user + " customresponse", nil
 	})
-	handler := m.commandMap["samplecommand"]
-	if handler == nil {
-		t.Fatal("handler is not registered")
+	slackCmd := m.commandMap["samplecommand"]
+	if slackCmd == nil {
+		t.Fatal("slackCmd is not registered")
 	}
-	if resp, err := handler("user1", []string{}); resp != "user1 customresponse" || err != nil {
+	if resp, err := slackCmd.handler("user1", []string{}); resp != "user1 customresponse" || err != nil {
 		t.Fatal("invocation failed, response:", resp, ", error:", err)
 	}
 }
@@ -72,7 +72,7 @@ func TestWithDefaultHandler(t *testing.T) {
 	})
 	m.RegisterDefaultHandler(func(user string, args []string) (string, error) {
 		return "default handler", nil
-	})
+	}, false)
 	table := map[string]string{
 		"start":          "tarik customresponse",
 		"error":          "tarik error",
