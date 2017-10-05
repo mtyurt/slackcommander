@@ -53,7 +53,6 @@ func (mux *SlackMux) RegisterCommandWithFormattedResponse(command string, handle
 	mux.commandMu.Lock()
 	mux.commandMap[command] = &slackCommand{handler: nil, async: async, formattedResponseHandler: handler}
 	mux.commandMu.Unlock()
-
 }
 func (mux *SlackMux) registerCommandHandlerWithAsyncOption(command string, handler SlackCommandHandler, async bool) {
 	mux.initializeMutexAndMap()
@@ -61,11 +60,20 @@ func (mux *SlackMux) registerCommandHandlerWithAsyncOption(command string, handl
 	mux.commandMap[command] = &slackCommand{handler: handler, async: async, formattedResponseHandler: nil}
 	mux.commandMu.Unlock()
 }
-func (mux *SlackMux) initializeMutexAndMap() {
+func (mux *SlackMux) ClearCommandHandlers() {
+	if initialized := mux.initializeMutexAndMap(); !initialized {
+		mux.commandMu.Lock()
+		mux.commandMap = make(map[string]*slackCommand)
+		mux.commandMu.Unlock()
+	}
+}
+func (mux *SlackMux) initializeMutexAndMap() bool {
 	if mux.commandMu == nil || mux.commandMap == nil {
 		mux.commandMu = &sync.Mutex{}
 		mux.commandMap = make(map[string]*slackCommand)
+		return true
 	}
+	return false
 }
 func (mux *SlackMux) RegisterDefaultHandler(handler SlackCommandHandler, isAsync bool) {
 	mux.defaultHandler = &slackCommand{handler: handler, async: isAsync}
@@ -98,7 +106,6 @@ func (mux *SlackMux) SlackHandler() func(w http.ResponseWriter, r *http.Request)
 		}
 		if slackCmd.formattedResponseHandler != nil {
 			go sendFormattedResponse(func() (*slack.PostMessageParameters, error) {
-				fmt.Println("handling formatted response for user", user)
 				return slackCmd.formattedResponseHandler(user, commands)
 			}, r.FormValue("response_url"))
 			return
@@ -132,26 +139,30 @@ func sendFormattedResponse(commandHandler func() (*slack.PostMessageParameters, 
 		fmt.Println("Something went wrong -", err)
 		handlerResp = &slack.PostMessageParameters{Text: "something went wrong - " + err.Error()}
 	}
-	jsonStr, err := json.Marshal(handlerResp)
+	err = postResponse(handlerResp, responseUrl)
 	if err != nil {
-		fmt.Println("Async call has blown, cannot marshal response data to json")
-		return
-	}
-	fmt.Println("Posting json", string(jsonStr), "to "+responseUrl)
-	resp, err := http.Post(responseUrl, "application/json", bytes.NewBuffer(jsonStr))
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	defer resp.Body.Close()
-	asyncRespBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Async call has blown cannot read response body, response code:", resp.Status, "error:", err.Error())
-		return
-	}
-	if resp.StatusCode >= 400 {
-		fmt.Println("Async call has blown, response code:", resp.Status, "response body:", string(asyncRespBody))
-		return
+		fmt.Println("Async call has failed:", err.Error())
 	}
 	fmt.Println("Async call successful")
+}
+func postResponse(params *slack.PostMessageParameters, url string) error {
+
+	jsonStr, err := json.Marshal(params)
+	if err != nil {
+		return errors.New("Marshaling parameters has failed: " + err.Error())
+	}
+	fmt.Printf("Posting response %s to %s\n", jsonStr, url)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonStr))
+	if err != nil {
+		return errors.New("Post request has failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return errors.New("Post request has failed, cannot read response body, response code: " + resp.Status + " error: " + err.Error())
+	}
+	if resp.StatusCode >= 400 {
+		return errors.New("Post message has failed with response code: " + resp.Status + " response body: " + string(respBody))
+	}
+	return nil
 }
