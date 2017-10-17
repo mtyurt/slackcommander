@@ -113,7 +113,6 @@ func (mux *SlackMux) SlackHandler() func(w http.ResponseWriter, r *http.Request)
 			if _, err := fmt.Fprintf(w, "Command received, wait for it..."); err != nil {
 				fmt.Printf("Error while sending first response of async command, not aborting", err)
 			}
-			fmt.Println("Async first response is successful")
 			go sendFormattedResponse(func() (*slack.PostMessageParameters, error) {
 				text, err := slackCmd.handler(user, commands)
 				if err != nil {
@@ -143,7 +142,6 @@ func sendFormattedResponse(commandHandler func() (*slack.PostMessageParameters, 
 	if err != nil {
 		fmt.Println("Async call has failed:", err.Error())
 	}
-	fmt.Println("Async call successful")
 }
 func postResponse(params *slack.PostMessageParameters, url string) error {
 
@@ -151,7 +149,6 @@ func postResponse(params *slack.PostMessageParameters, url string) error {
 	if err != nil {
 		return errors.New("Marshaling parameters has failed: " + err.Error())
 	}
-	fmt.Printf("Posting response %s to %s\n", jsonStr, url)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return errors.New("Post request has failed: " + err.Error())
