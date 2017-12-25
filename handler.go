@@ -78,6 +78,9 @@ func (mux *SlackMux) initializeMutexAndMap() bool {
 func (mux *SlackMux) RegisterDefaultHandler(handler SlackCommandHandler, isAsync bool) {
 	mux.defaultHandler = &slackCommand{handler: handler, async: isAsync}
 }
+func (mux *SlackMux) RegisterDefaultHandlerWithFormattedResponse(handler CommandHandlerWithFormattedResponse, isAsync bool) {
+	mux.defaultHandler = &slackCommand{formattedResponseHandler: handler, async: isAsync}
+}
 func (mux *SlackMux) SlackHandler() func(w http.ResponseWriter, r *http.Request) {
 	if mux.Token == "" {
 		// we should have a token configured at this point
