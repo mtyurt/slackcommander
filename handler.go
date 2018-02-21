@@ -121,7 +121,7 @@ func (mux *SlackMux) SlackHandler() func(w http.ResponseWriter, r *http.Request)
 				if err != nil {
 					return nil, err
 				}
-				return &slack.PostMessageParameters{Text: text, Markdown: true}, nil
+				return &slack.PostMessageParameters{Attachments: []slack.Attachment{slack.Attachment{Text: text}}, Markdown: true}, nil
 			}, r.FormValue("response_url"))
 			return
 		}
@@ -139,7 +139,9 @@ func sendFormattedResponse(commandHandler func() (*slack.PostMessageParameters, 
 	handlerResp, err := commandHandler()
 	if err != nil {
 		fmt.Println("Something went wrong -", err)
-		handlerResp = &slack.PostMessageParameters{Text: "something went wrong - " + err.Error()}
+
+		text := "something went wrong - " + err.Error()
+		handlerResp = &slack.PostMessageParameters{Attachments: []slack.Attachment{slack.Attachment{Text: text}}}
 	}
 	err = postResponse(handlerResp, responseUrl)
 	if err != nil {
