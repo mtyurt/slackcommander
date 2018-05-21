@@ -14,7 +14,8 @@ import (
 )
 
 type SlackMux struct {
-	Token string
+	Token             string
+	SkipSlackResponse bool
 
 	commandMu      *sync.Mutex
 	commandMap     map[string]*slackCommand
@@ -108,15 +109,15 @@ func (mux *SlackMux) SlackHandler() func(w http.ResponseWriter, r *http.Request)
 			slackCmd = mux.defaultHandler
 		}
 		if slackCmd.formattedResponseHandler != nil {
-			go sendFormattedResponse(func() (*slack.PostMessageParameters, error) {
+			go mux.sendFormattedResponse(func() (*slack.PostMessageParameters, error) {
 				return slackCmd.formattedResponseHandler(user, commands)
 			}, r.FormValue("response_url"))
 			return
 		} else if slackCmd.async {
 			if _, err := fmt.Fprintf(w, "Command received, wait for it..."); err != nil {
-				fmt.Printf("Error while sending first response of async command, not aborting", err)
+				fmt.Printf("Error while sending first response of async command, not aborting: %v", err)
 			}
-			go sendFormattedResponse(func() (*slack.PostMessageParameters, error) {
+			go mux.sendFormattedResponse(func() (*slack.PostMessageParameters, error) {
 				text, err := slackCmd.handler(user, commands)
 				if err != nil {
 					return nil, err
@@ -135,7 +136,7 @@ func (mux *SlackMux) SlackHandler() func(w http.ResponseWriter, r *http.Request)
 		}
 	}
 }
-func sendFormattedResponse(commandHandler func() (*slack.PostMessageParameters, error), responseUrl string) {
+func (mux *SlackMux) sendFormattedResponse(commandHandler func() (*slack.PostMessageParameters, error), responseUrl string) {
 	handlerResp, err := commandHandler()
 	if err != nil {
 		fmt.Println("Something went wrong -", err)
@@ -143,12 +144,16 @@ func sendFormattedResponse(commandHandler func() (*slack.PostMessageParameters, 
 		text := "something went wrong - " + err.Error()
 		handlerResp = &slack.PostMessageParameters{Attachments: []slack.Attachment{slack.Attachment{Text: text}}}
 	}
-	err = postResponse(handlerResp, responseUrl)
+	err = mux.postResponse(handlerResp, responseUrl)
 	if err != nil {
 		fmt.Println("Async call has failed:", err.Error())
 	}
 }
-func postResponse(params *slack.PostMessageParameters, url string) error {
+func (mux *SlackMux) postResponse(params *slack.PostMessageParameters, url string) error {
+	if mux.SkipSlackResponse {
+		fmt.Printf("slackcommander: %s", params.Attachments[0].Text)
+		return nil
+	}
 
 	jsonStr, err := json.Marshal(params)
 	if err != nil {
