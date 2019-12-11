@@ -14,8 +14,9 @@ import (
 )
 
 type SlackMux struct {
-	Token             string
-	SkipSlackResponse bool
+	Token                 string
+	SkipSlackResponse     bool
+	IgnoreSlackFormatting bool
 
 	commandMu      *sync.Mutex
 	commandMap     map[string]CommandDef
@@ -110,14 +111,17 @@ func (mux *SlackMux) slackHandlerWrapper(w http.ResponseWriter, r *http.Request)
 		return resultChan
 	}
 	user := r.FormValue("user_name")
-	text := r.FormValue("text")
+	text := strings.TrimSpace(r.FormValue("text"))
+	if mux.IgnoreSlackFormatting {
+		text = removeSimpleFormatting(text)
+	}
 	responseURL := r.FormValue("response_url")
 	if text == "" && mux.defaultHandler == nil {
 		writeResponseWithBadRequest(&w, "Provide a command")
 		resultChan <- false
 		return resultChan
 	}
-	commands := strings.Split(text, " ")
+	commands := strings.Fields(text)
 	slackCmd, ok := mux.commandMap[commands[0]]
 	if !ok {
 		if mux.defaultHandler == nil {
@@ -190,4 +194,26 @@ func (mux *SlackMux) postResponse(response CommandResponse, url string) error {
 		return errors.New("Post message has failed with response code: " + resp.Status + " response body: " + string(respBody))
 	}
 	return nil
+}
+
+func removeSimpleFormatting(str string) string {
+	formattingCharacters := []uint8{'*', '~', '_'}
+	temp := str
+	for len(temp) > 1 {
+		if contains(formattingCharacters, temp[0]) && temp[0] == temp[len(temp)-1] {
+			temp = temp[1 : len(temp)-1]
+		} else {
+			break
+		}
+	}
+	return temp
+}
+
+func contains(slice []uint8, char uint8) bool {
+	for _, t := range slice {
+		if char == t {
+			return true
+		}
+	}
+	return false
 }
