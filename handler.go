@@ -121,18 +121,18 @@ func (mux *SlackMux) slackHandlerWrapper(w http.ResponseWriter, r *http.Request)
 		resultChan <- false
 		return resultChan
 	}
+
 	commands := strings.Fields(text)
-	slackCmd, ok := mux.commandMap[commands[0]]
-	if !ok {
-		if mux.defaultHandler == nil {
-			fmt.Fprint(w, commands[0]+" is not a valid command.")
-			resultChan <- true
-			return resultChan
-		}
-		slackCmd = *mux.defaultHandler
+	commandName := getCommandName(commands)
+
+	if !mux.isCommandValid(commands, commandName) {
+		fmt.Fprintf(w, "Command not found: [%s]", commandName)
+		resultChan <- true
+		return resultChan
 	}
 
-	cmdArgs := CommandArgs{User: user, Command: commands[0], Args: commands, FullText: text, ResponseURL: responseURL, ChannelID: r.FormValue("channel_id"), UserID: r.FormValue("user_id")}
+	slackCmd := mux.getSlackCmd(commands, commandName)
+	cmdArgs := CommandArgs{User: user, Command: commandName, Args: commands, FullText: text, ResponseURL: responseURL, ChannelID: r.FormValue("channel_id"), UserID: r.FormValue("user_id")}
 
 	if _, err := fmt.Fprintf(w, "Command received, wait for it..."); err != nil {
 		fmt.Printf("Error while sending first response of async command, not aborting: %v", err)
@@ -140,7 +140,33 @@ func (mux *SlackMux) slackHandlerWrapper(w http.ResponseWriter, r *http.Request)
 
 	go mux.handleCommand(slackCmd, cmdArgs, resultChan)
 	return resultChan
+}
 
+func (mux *SlackMux) getSlackCmd(commands []string, commandName string) CommandDef {
+	if len(commands) > 0 {
+		return mux.commandMap[commandName]
+	} else {
+		return *mux.defaultHandler
+	}
+}
+
+func (mux *SlackMux) isCommandValid(commands []string, commandName string) bool {
+	if len(commands) > 0 {
+		_, ok := mux.commandMap[commandName]
+		return ok
+	} else {
+		if mux.defaultHandler == nil {
+			return false
+		}
+	}
+	return true
+}
+
+func getCommandName(commands []string) string {
+	if len(commands) > 0 {
+		return commands[0]
+	}
+	return ""
 }
 
 func (mux SlackMux) handleCommand(c CommandDef, args CommandArgs, resultChan chan bool) {
