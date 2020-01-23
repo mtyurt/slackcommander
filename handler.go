@@ -5,18 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/nlopes/slack"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
-
-	"github.com/nlopes/slack"
 )
 
 type SlackMux struct {
 	Token                 string
 	SkipSlackResponse     bool
 	IgnoreSlackFormatting bool
+	QuoteAwareArgParse    bool
 
 	commandMu      *sync.Mutex
 	commandMap     map[string]CommandDef
@@ -122,7 +122,12 @@ func (mux *SlackMux) slackHandlerWrapper(w http.ResponseWriter, r *http.Request)
 		return resultChan
 	}
 
-	commands := strings.Fields(text)
+	commands, err := mux.parseCommand(text)
+	if err != nil {
+		writeResponseWithBadRequest(&w, err.Error())
+		resultChan <- false
+		return resultChan
+	}
 	commandName := getCommandName(commands)
 
 	if !mux.isCommandValid(commands, commandName) {
@@ -220,6 +225,16 @@ func (mux *SlackMux) postResponse(response CommandResponse, url string) error {
 		return errors.New("Post message has failed with response code: " + resp.Status + " response body: " + string(respBody))
 	}
 	return nil
+}
+
+func (mux SlackMux) parseCommand(text string) ([]string, error) {
+	if mux.QuoteAwareArgParse {
+		commands, err := ParseArgs(text)
+		return commands, err
+	} else {
+		commands := strings.Fields(text)
+		return commands, nil
+	}
 }
 
 func removeSimpleFormatting(str string) string {
