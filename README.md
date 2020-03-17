@@ -10,7 +10,7 @@ import (
 
 func main() {
 	mux := &slackcommander.SlackMux{}
-	mux.Token = "slacktokenhere"
+	mux.Token = "commaseparatedslacktokenshere"
 	helpCommand := slackcommander.CommandDef{Handler: func(args slackcommander.CommandArgs) (*slackcommander.CommandResponse, error) {
 		resp := slackcommander.SimpleTextResponse("Hello, " + args.User)
 		return &resp, nil
